@@ -8,6 +8,15 @@ extends Node
 # DEBUG FLAGS
 # =============================================================================
 const DEBUG_EVENTS := false
+const MUTE_EVENTS = {
+	"audio.sfx":  true,
+	"player.moved": true,
+	"round.timer.tick": true
+}
+const INSPECT_DEBUG := false
+const INSPECT_EVENTS = {
+	"audio.sfx": true
+}
 const DEBUG_SCORING := false
 
 # =============================================================================
@@ -63,11 +72,12 @@ signal guy_entered_longing(guy: Node2D, duration: float)
 signal guy_entered_tantrum(guy: Node2D)
 signal guy_left_board(guy: Node2D)
 signal guy_despawned(guy: Node2D)
+signal guy_spawn_particle(guy: Node2D, position: Vector2)
 
 # =============================================================================
 # CHAOS & MESSINESS
 # =============================================================================
-signal chaos_particle_spawned(particle: Node2D, source_guy: Node2D)
+signal chaos_particle_spawned(particle: Dictionary, source_guy: Node2D, position: Vector2)
 signal chaos_particle_despawned(particle: Node2D)
 signal chaos_level_changed(particle_count: int, messiness_ratio: float)
 signal messiness_threshold_warning(current: float, threshold: float)
@@ -118,7 +128,7 @@ signal game_over(final_score: int, rounds_completed: int)
 signal endless_mode_unlocked()
 
 # =============================================================================
-# SUBSCRIPTION SYSTEM (matches Library Science pattern)
+# SUBSCRIPTION SYSTEM
 # =============================================================================
 var _subscriptions: Dictionary = {}
 
@@ -127,7 +137,14 @@ func publish(event_name: String, payload := {}) -> void:
 	emit_signal("event", event_name, payload)
 	
 	if DEBUG_EVENTS:
-		print("[SIGNAL] %s: %s" % [event_name, payload])
+		if INSPECT_DEBUG:
+			if event_name in INSPECT_EVENTS.keys():
+				print("[SIGNAL] %s: %s" % [event_name, payload])
+		else:
+			if event_name not in MUTE_EVENTS.keys():
+				print("[SIGNAL] %s: %s" % [event_name, payload])
+			elif not MUTE_EVENTS[event_name]:
+				print("[SIGNAL] %s: %s" % [event_name, payload])
 	
 	# Bridge to typed signals
 	match event_name:
@@ -240,12 +257,16 @@ func publish(event_name: String, payload := {}) -> void:
 			guy_left_board.emit(payload.get("guy", null))
 		"guy.despawned":
 			guy_despawned.emit(payload.get("guy", null))
-		
+		"guy.spawn.particle":
+			emit_signal("guy_spawn_particle",
+				payload.get("source_guy", null),
+				payload.get("position", Vector2.ZERO))
 		# Chaos
 		"chaos.particle.spawned":
-			chaos_particle_spawned.emit(
-				payload.get("particle", null),
-				payload.get("source_guy", null))
+			emit_signal("chaos_particle_spawned",
+				payload.get("particle", {}),
+				payload.get("source_guy", null),
+				payload.get("position", Vector2.ZERO))
 		"chaos.particle.despawned":
 			chaos_particle_despawned.emit(payload.get("particle", null))
 		"chaos.level.changed":

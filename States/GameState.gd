@@ -333,7 +333,7 @@ func _on_box_emptied(_box: Node2D) -> void:
 	apply_penalty(PENALTY_PER_EMPTY_BOX, "empty_box")
 
 
-func _on_chaos_particle_spawned(_particle: Node2D, _source: Node2D) -> void:
+func _on_chaos_particle_spawned(_particle: Node2D, _source: Node2D, _position: Vector2) -> void:
 	current_chaos_particles += 1
 	update_multiplier()
 	check_messiness_threshold()

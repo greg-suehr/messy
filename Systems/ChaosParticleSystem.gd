@@ -33,7 +33,7 @@ func _ready() -> void:
 
 func _connect_signals() -> void:
 	# Use subscribe pattern to get the full payload with position
-	SignalBus.subscribe("chaos.particle.spawned", _on_chaos_spawn_event, self)
+	SignalBus.subscribe("guy.spawn.particle", _on_chaos_spawn_event, self)
 
 
 # =============================================================================

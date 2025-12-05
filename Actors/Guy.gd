@@ -261,8 +261,7 @@ func _spawn_chaos_particles() -> void:
 		var distance = randf_range(30, 80)
 		var particle_pos = global_position + Vector2(cos(angle), sin(angle)) * distance
 		
-		SignalBus.publish("chaos.particle.spawned", {
-			"particle": null,  # Will be created by ChaosParticleSystem
+		SignalBus.publish("guy.spawn.particle", {
 			"source_guy": self,
 			"position": particle_pos
 		})
