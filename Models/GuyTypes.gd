@@ -3,6 +3,8 @@ extends Node
 ##
 ## Guys are the chaos agents that scatter Things around the board.
 ## Different types have different behaviors and visual appearances.
+##
+## VISUAL STYLE: Darker, more saturated colors. Industrial/digital threat palette.
 
 # =============================================================================
 # GUY TYPE DATA
@@ -59,15 +61,16 @@ func _ready() -> void:
 
 
 func _register_default_types() -> void:
-	# From GDD: Light purple (base), electric lime (scavenger), dark violet (thief)
+	# HARDENED PALETTE: Aggressive, saturated, industrial
+	# No more pastel - these are digital threats
 	
 	_register(GuyType.new(
 		"normal",
-		"Guy",
-		Color("#C8A2C8"),  # Light purple
+		"Drone",
+		Color("#8B5CF6"),  # Electric violet - aggressive but readable
 		100.0,  # Speed
-		8.0,    # Longing duration (8 seconds per GDD)
-		5,      # Tantrum particles (4-6 per GDD)
+		8.0,    # Longing duration
+		5,      # Tantrum particles
 		"normal",
 		1       # Available from start
 	))
@@ -75,7 +78,7 @@ func _register_default_types() -> void:
 	_register(GuyType.new(
 		"scavenger",
 		"Scavenger",
-		Color("#7FFF00"),  # Electric lime
+		Color("#22C55E"),  # Toxic green - fast, dangerous
 		130.0,  # Faster
 		6.0,    # Shorter patience
 		7,      # More chaos
@@ -86,10 +89,10 @@ func _register_default_types() -> void:
 	_register(GuyType.new(
 		"thief",
 		"Thief",
-		Color("#9400D3"),  # Dark violet
+		Color("#EF4444"),  # Blood red - maximum threat
 		150.0,  # Fastest
-		10.0,   # More patient (sneaky)
-		4,      # Fewer particles (stealthy)
+		10.0,   # More patient (stalking)
+		4,      # Fewer particles (precise)
 		"thief",
 		10      # Late game
 	))

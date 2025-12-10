@@ -3,6 +3,9 @@ extends Node
 ##
 ## Things are the core resource players manage. Each type has a distinct
 ## color and shape for easy visual identification.
+##
+## VISUAL STYLE: High contrast, fully saturated neon colors.
+## Sharp geometric forms. Glowing, electric feel.
 
 # =============================================================================
 # THING TYPE DATA
@@ -43,51 +46,51 @@ func _ready() -> void:
 
 
 func _register_default_types() -> void:
-	# Core palette from GDD:
-	# Cyan triangle, magenta star, lime circle, gold square, coral hexagon
+	# HARDENED PALETTE: Maximum saturation, electric neon
+	# These should POP against the dark board
 	
 	_register(ThingType.new(
 		"cyan_triangle",
-		"Cyan Triangle",
-		Color("#00FFFF"),
+		"Cyan Spike",
+		Color("#00F5FF"),  # Electric cyan - ice cold
 		"triangle",
-		1,  # Available from round 1
+		1,
 		10
 	))
 	
 	_register(ThingType.new(
 		"magenta_star",
-		"Magenta Star",
-		Color("#FF00FF"),
+		"Magenta Burst",
+		Color("#FF00AA"),  # Hot magenta - aggressive
 		"star",
-		2,  # Unlocks round 2
+		2,
 		10
 	))
 	
 	_register(ThingType.new(
 		"lime_circle",
-		"Lime Circle",
-		Color("#32CD32"),
+		"Toxic Orb",
+		Color("#39FF14"),  # Nuclear green - toxic
 		"circle",
-		4,  # Unlocks round 4
+		4,
 		10
 	))
 	
 	_register(ThingType.new(
 		"gold_square",
-		"Gold Square",
-		Color("#FFD700"),
+		"Gold Block",
+		Color("#FFB800"),  # Electric gold - valuable
 		"square",
-		6,  # Unlocks round 6
+		6,
 		10
 	))
 	
 	_register(ThingType.new(
 		"coral_hexagon",
-		"Coral Hexagon",
-		Color("#FF7F50"),
+		"Ember Core",
+		Color("#FF4D4D"),  # Ember red - hot
 		"hexagon",
-		8,  # Unlocks round 8
+		8,
 		10
 	))
 
@@ -152,42 +155,45 @@ func get_type_by_color(color: Color) -> ThingType:
 func get_shape_vertices(shape: String) -> PackedVector2Array:
 	match shape:
 		"triangle":
+			# Sharp, aggressive triangle
 			return PackedVector2Array([
-				Vector2(0, -1),
-				Vector2(-0.866, 0.5),
-				Vector2(0.866, 0.5)
+				Vector2(0, -1.1),  # Slightly taller
+				Vector2(-0.9, 0.6),
+				Vector2(0.9, 0.6)
 			])
 		"star":
+			# Sharp 5-point star
 			var points: PackedVector2Array = []
 			for i in range(10):
 				var angle = (i * TAU / 10) - PI/2
-				var radius = 1.0 if i % 2 == 0 else 0.4
+				var radius = 1.0 if i % 2 == 0 else 0.35  # Sharper inner points
 				points.append(Vector2(cos(angle), sin(angle)) * radius)
 			return points
 		"circle":
+			# Octagon instead of smooth circle - more angular
 			var points: PackedVector2Array = []
-			for i in range(32):
-				var angle = i * TAU / 32
+			for i in range(8):
+				var angle = i * TAU / 8
 				points.append(Vector2(cos(angle), sin(angle)))
 			return points
 		"square":
+			# Diamond orientation for more edge
 			return PackedVector2Array([
-				Vector2(-0.7, -0.7),
-				Vector2(0.7, -0.7),
-				Vector2(0.7, 0.7),
-				Vector2(-0.7, 0.7)
+				Vector2(0, -0.85),
+				Vector2(0.85, 0),
+				Vector2(0, 0.85),
+				Vector2(-0.85, 0)
 			])
 		"hexagon":
 			var points: PackedVector2Array = []
 			for i in range(6):
-				var angle = (i * TAU / 6) - PI/2
+				var angle = (i * TAU / 6)  # Flat top orientation
 				points.append(Vector2(cos(angle), sin(angle)))
 			return points
 		_:
-			# Default to square
 			return PackedVector2Array([
-				Vector2(-0.7, -0.7),
-				Vector2(0.7, -0.7),
-				Vector2(0.7, 0.7),
-				Vector2(-0.7, 0.7)
+				Vector2(0, -0.85),
+				Vector2(0.85, 0),
+				Vector2(0, 0.85),
+				Vector2(-0.85, 0)
 			])

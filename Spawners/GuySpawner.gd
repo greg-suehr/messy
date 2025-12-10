@@ -2,8 +2,9 @@ extends Node
 class_name GuySpawner
 ## GuySpawner - Manages spawning Guys (chaos agents) during active rounds
 ##
-## Guys spawn at escalating rates as rounds progress. The spawner handles
-## timing, type selection based on unlocked GuyTypes, and target assignment.
+## Guys spawn in a central spawn zone on the game board with a fade-in effect.
+## The spawner handles timing, type selection based on unlocked GuyTypes, 
+## and target assignment.
 
 # =============================================================================
 # CONFIGURATION
@@ -14,6 +15,10 @@ class_name GuySpawner
 const BASE_SPAWN_INTERVAL := 3.0  # Seconds between spawns at start
 const MIN_SPAWN_INTERVAL := 0.8   # Fastest spawn rate
 const ESCALATION_RATE := 0.95     # Multiply interval by this each spawn
+
+# Spawn zone configuration (percentage of board size)
+const SPAWN_ZONE_SIZE_RATIO := 0.6  # 60% of board is spawn zone
+const SPAWN_ZONE_MARGIN := 32.0     # Minimum margin from spawn zone edge
 
 # =============================================================================
 # STATE
@@ -27,6 +32,9 @@ var max_concurrent_guys: int = 15
 var active_guys: Array[Guy] = []
 var _game_board: GameBoard = null
 var _box_spawner: BoxSpawner = null
+
+# Spawn zone bounds (calculated from board size)
+var _spawn_zone_rect: Rect2 = Rect2()
 
 
 # =============================================================================
@@ -42,14 +50,47 @@ func _connect_signals() -> void:
 	SignalBus.guy_despawned.connect(_on_guy_despawned)
 	SignalBus.game_paused.connect(_on_game_paused)
 	SignalBus.game_resumed.connect(_on_game_resumed)
+	SignalBus.round_setup_started.connect(_on_round_setup)
 
 
 func set_game_board(board: GameBoard) -> void:
 	_game_board = board
+	_calculate_spawn_zone()
 
 
 func set_box_spawner(spawner: BoxSpawner) -> void:
 	_box_spawner = spawner
+
+
+# =============================================================================
+# SPAWN ZONE CALCULATION
+# =============================================================================
+func _calculate_spawn_zone() -> void:
+	"""Calculate the central spawn zone based on current board size."""
+	if not _game_board:
+		_spawn_zone_rect = Rect2(-64, -64, 128, 128)  # Default fallback
+		return
+	
+	var board_pixel_size = _game_board.get_board_pixel_size()
+	var spawn_size = board_pixel_size * SPAWN_ZONE_SIZE_RATIO
+	
+	# Center the spawn zone on the board
+	var spawn_position = -spawn_size * 0.5
+	_spawn_zone_rect = Rect2(spawn_position, spawn_size)
+
+
+func get_spawn_zone_position() -> Vector2:
+	"""Get a random position within the central spawn zone."""
+	return Vector2(
+		randf_range(
+			_spawn_zone_rect.position.x + SPAWN_ZONE_MARGIN,
+			_spawn_zone_rect.end.x - SPAWN_ZONE_MARGIN
+		),
+		randf_range(
+			_spawn_zone_rect.position.y + SPAWN_ZONE_MARGIN,
+			_spawn_zone_rect.end.y - SPAWN_ZONE_MARGIN
+		)
+	)
 
 
 # =============================================================================
@@ -108,12 +149,12 @@ func _spawn_guy(guy_type: GuyTypes.GuyType, target_box: Box) -> Guy:
 	
 	guy.guy_type_id = guy_type.id
 	
-	# Position at spawn point (outside board)
-	var spawn_pos = _get_spawn_position_for_box(target_box)
+	# Position in central spawn zone (not outside board anymore)
+	var spawn_pos = get_spawn_zone_position()
 	guy.global_position = spawn_pos
 	
-	# Calculate exit position (opposite side of board)
-	var exit_pos = _get_exit_position_from_spawn(spawn_pos)
+	# Calculate exit position (random edge of board)
+	var exit_pos = _get_random_exit_position()
 	
 	# Add to scene tree
 	if _game_board:
@@ -169,46 +210,25 @@ func _select_target_box(guy_type: GuyTypes.GuyType) -> Box:
 	return candidates[randi() % candidates.size()]
 
 
-func _get_spawn_position_for_box(target_box: Box) -> Vector2:
-	"""Get a spawn position that makes sense for approaching the target box."""
+func _get_random_exit_position() -> Vector2:
+	"""Get a random exit position outside the board."""
 	if not _game_board:
-		return Vector2(-200, 0)
-	
-	var box_pos = target_box.global_position
-	var _board_center = _game_board.get_board_center()
-	
-	# Determine which edge the box is on
-	var half_size = _game_board.get_board_pixel_size() * 0.5
-	var spawn_margin = GameBoard.TILE_SIZE * 3
-	
-	# Spawn from the edge opposite to where the box is
-	if abs(box_pos.y - (-half_size.y)) < GameBoard.TILE_SIZE:  # Box on north
-		return Vector2(box_pos.x + randf_range(-50, 50), half_size.y + spawn_margin)
-	elif abs(box_pos.y - half_size.y) < GameBoard.TILE_SIZE:  # Box on south
-		return Vector2(box_pos.x + randf_range(-50, 50), -half_size.y - spawn_margin)
-	elif abs(box_pos.x - half_size.x) < GameBoard.TILE_SIZE:  # Box on east
-		return Vector2(-half_size.x - spawn_margin, box_pos.y + randf_range(-50, 50))
-	else:  # Box on west
-		return Vector2(half_size.x + spawn_margin, box_pos.y + randf_range(-50, 50))
-
-
-func _get_exit_position_from_spawn(spawn_pos: Vector2) -> Vector2:
-	"""Get an exit position on the opposite side from spawn."""
-	if not _game_board:
-		return -spawn_pos
+		return Vector2(300, 0)
 	
 	var half_size = _game_board.get_board_pixel_size() * 0.5
 	var exit_margin = GameBoard.TILE_SIZE * 3
 	
-	# Exit on opposite side from spawn
-	if spawn_pos.y > half_size.y:  # Spawned south
-		return Vector2(spawn_pos.x, -half_size.y - exit_margin)
-	elif spawn_pos.y < -half_size.y:  # Spawned north
-		return Vector2(spawn_pos.x, half_size.y + exit_margin)
-	elif spawn_pos.x > half_size.x:  # Spawned east
-		return Vector2(-half_size.x - exit_margin, spawn_pos.y)
-	else:  # Spawned west
-		return Vector2(half_size.x + exit_margin, spawn_pos.y)
+	# Pick random edge
+	var edge = randi() % 4
+	match edge:
+		0:  # North
+			return Vector2(randf_range(-half_size.x, half_size.x), -half_size.y - exit_margin)
+		1:  # South
+			return Vector2(randf_range(-half_size.x, half_size.x), half_size.y + exit_margin)
+		2:  # East
+			return Vector2(half_size.x + exit_margin, randf_range(-half_size.y, half_size.y))
+		_:  # West
+			return Vector2(-half_size.x - exit_margin, randf_range(-half_size.y, half_size.y))
 
 
 # =============================================================================
@@ -256,8 +276,14 @@ func reset_for_round() -> void:
 # =============================================================================
 # SIGNAL HANDLERS
 # =============================================================================
+func _on_round_setup(_round_number: int) -> void:
+	# Recalculate spawn zone when board size might have changed
+	_calculate_spawn_zone()
+
+
 func _on_round_started(_round_number: int) -> void:
 	reset_for_round()
+	_calculate_spawn_zone()
 	# Delay first spawn slightly for setup phase feel
 	spawn_timer = -1.5
 	start_spawning()
@@ -299,3 +325,14 @@ func get_current_spawn_rate() -> float:
 	if current_spawn_interval <= 0:
 		return 0.0
 	return 60.0 / current_spawn_interval
+
+
+func get_active_guys() -> Array[Guy]:
+	"""Get array of active guys for boids calculations."""
+	_cleanup_inactive_guys()
+	return active_guys
+
+
+func get_spawn_zone() -> Rect2:
+	"""Get the current spawn zone rectangle."""
+	return _spawn_zone_rect

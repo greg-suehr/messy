@@ -9,13 +9,17 @@ class_name GameBoard
 # CONSTANTS
 # =============================================================================
 const TILE_SIZE := 32
-const MIN_BOARD_SIZE := Vector2i(6, 6)
-const MAX_BOARD_SIZE := Vector2i(20, 20)
+const MIN_BOARD_SIZE := Vector2i(20, 20)
+const MAX_BOARD_SIZE := Vector2i(80, 80)
 
-# Colors from GDD
-const BOARD_BG_COLOR := Color("#1a1a2e")  # Deep navy
-const BOARD_BORDER_COLOR_1 := Color("#FF69B4")  # Hot pink
-const BOARD_BORDER_COLOR_2 := Color("#00FFFF")  # Cyan
+# HARDENED COLOR PALETTE
+const BOARD_BG_COLOR := Color("#0a0a0f")  # Near black
+const BOARD_BG_SECONDARY := Color("#12121a")  # Slightly lighter for grid
+const BORDER_PRIMARY := Color("#FF2D6A")  # Hot magenta
+const BORDER_SECONDARY := Color("#00F0FF")  # Electric cyan
+const BORDER_WARNING := Color("#FF4444")  # Danger red
+const GRID_COLOR_BASE := Color("#1a1a24")  # Dark grid
+const GRID_COLOR_ACCENT := Color("#2a2a3a")  # Slightly visible
 
 # Collision layers
 const LAYER_PLAYER := 1
@@ -41,8 +45,10 @@ var active_boxes: Array[Box] = []
 var active_things: Array[Thing] = []
 var active_guys: Array[Guy] = []
 
-# Visual
-var _border_gradient_offset: float = 0.0
+var _border_phase: float = 0.0
+var _pulse_intensity: float = 0.0
+var _warning_flash: float = 0.0
+var _corner_glow_phase: float = 0.0
 
 
 # =============================================================================
@@ -59,6 +65,7 @@ func _connect_signals() -> void:
 	SignalBus.thing_spawned.connect(_on_thing_spawned)
 	SignalBus.guy_spawned.connect(_on_guy_spawned)
 	SignalBus.guy_despawned.connect(_on_guy_despawned)
+	SignalBus.chaos_level_changed.connect(_on_chaos_changed)
 
 
 # =============================================================================
@@ -101,24 +108,20 @@ func _calculate_spawn_edges() -> void:
 	spawn_edges.clear()
 	
 	var half_size = Vector2(board_size) * TILE_SIZE * 0.5
-	var padding = TILE_SIZE * 1.5  # Keep away from corners
+	var padding = TILE_SIZE * 1.5
 	
-	# North edge (top)
 	spawn_edges["north"] = []
 	for x in range(int(-half_size.x + padding), int(half_size.x - padding), TILE_SIZE):
 		spawn_edges["north"].append(Vector2(x, -half_size.y + TILE_SIZE * 0.5))
 	
-	# South edge (bottom)
 	spawn_edges["south"] = []
 	for x in range(int(-half_size.x + padding), int(half_size.x - padding), TILE_SIZE):
 		spawn_edges["south"].append(Vector2(x, half_size.y - TILE_SIZE * 0.5))
 	
-	# East edge (right)
 	spawn_edges["east"] = []
 	for y in range(int(-half_size.y + padding), int(half_size.y - padding), TILE_SIZE):
 		spawn_edges["east"].append(Vector2(half_size.x - TILE_SIZE * 0.5, y))
 	
-	# West edge (left)
 	spawn_edges["west"] = []
 	for y in range(int(-half_size.y + padding), int(half_size.y - padding), TILE_SIZE):
 		spawn_edges["west"].append(Vector2(-half_size.x + TILE_SIZE * 0.5, y))
@@ -128,7 +131,6 @@ func _calculate_spawn_edges() -> void:
 # SPATIAL QUERIES
 # =============================================================================
 func get_random_board_position() -> Vector2:
-	"""Get a random position inside the board, avoiding edges."""
 	var margin = TILE_SIZE * 2
 	return Vector2(
 		randf_range(board_rect.position.x + margin, board_rect.end.x - margin),
@@ -137,7 +139,6 @@ func get_random_board_position() -> Vector2:
 
 
 func get_random_edge_position(edge: String = "") -> Vector2:
-	"""Get a random position along an edge. If edge is empty, pick random edge."""
 	if edge.is_empty():
 		var edges = ["north", "south", "east", "west"]
 		edge = edges[randi() % edges.size()]
@@ -149,7 +150,6 @@ func get_random_edge_position(edge: String = "") -> Vector2:
 
 
 func get_exit_position(from_edge: String = "") -> Vector2:
-	"""Get a position outside the board for guys to exit to."""
 	var half_size = Vector2(board_size) * TILE_SIZE * 0.5
 	var exit_margin = TILE_SIZE * 3
 	
@@ -171,17 +171,14 @@ func get_exit_position(from_edge: String = "") -> Vector2:
 
 
 func get_spawn_position_for_guy() -> Vector2:
-	"""Get a position outside the board for guys to spawn at."""
 	return get_exit_position()
 
 
 func is_inside_board(pos: Vector2) -> bool:
-	"""Check if a position is inside the playable area."""
 	return board_rect.has_point(pos)
 
 
 func clamp_to_board(pos: Vector2, margin: float = 0.0) -> Vector2:
-	"""Clamp a position to stay within board bounds."""
 	var inner_rect = board_rect.grow(-margin)
 	return Vector2(
 		clampf(pos.x, inner_rect.position.x, inner_rect.end.x),
@@ -190,7 +187,6 @@ func clamp_to_board(pos: Vector2, margin: float = 0.0) -> Vector2:
 
 
 func get_nearest_box(pos: Vector2, thing_type_id: String = "") -> Box:
-	"""Find the nearest box, optionally filtering by thing type."""
 	var nearest: Box = null
 	var nearest_dist := INF
 	
@@ -209,7 +205,6 @@ func get_nearest_box(pos: Vector2, thing_type_id: String = "") -> Box:
 
 
 func get_boxes_of_type(thing_type_id: String) -> Array[Box]:
-	"""Get all boxes that hold a specific thing type."""
 	var result: Array[Box] = []
 	for box in active_boxes:
 		if is_instance_valid(box) and box.thing_type_id == thing_type_id:
@@ -218,7 +213,6 @@ func get_boxes_of_type(thing_type_id: String) -> Array[Box]:
 
 
 func get_scattered_things() -> Array[Thing]:
-	"""Get all things currently scattered on the board (not in boxes)."""
 	var result: Array[Thing] = []
 	for thing in active_things:
 		if is_instance_valid(thing) and not thing.is_in_box:
@@ -227,7 +221,6 @@ func get_scattered_things() -> Array[Thing]:
 
 
 func get_things_near(pos: Vector2, radius: float) -> Array[Thing]:
-	"""Get all scattered things within radius of position."""
 	var result: Array[Thing] = []
 	var radius_sq = radius * radius
 	
@@ -273,7 +266,6 @@ func unregister_guy(guy: Guy) -> void:
 
 
 func clear_all_entities() -> void:
-	"""Remove all entities from the board. Called between rounds."""
 	for box in active_boxes:
 		if is_instance_valid(box):
 			box.queue_free()
@@ -294,7 +286,6 @@ func clear_all_entities() -> void:
 # SIGNAL HANDLERS
 # =============================================================================
 func _on_round_setup(_round_number: int) -> void:
-	# Apply any pending board size changes from parameterization
 	set_board_size(GameState.param_board_size)
 
 
@@ -318,30 +309,77 @@ func _on_guy_despawned(guy: Node2D) -> void:
 		unregister_guy(guy as Guy)
 
 
+func _on_chaos_changed(particle_count: int, messiness_ratio: float) -> void:
+	# Increase warning visuals with chaos
+	_warning_flash = messiness_ratio
+
+
 # =============================================================================
-# DRAWING
+# UPDATE & DRAWING
 # =============================================================================
 func _process(delta: float) -> void:
-	# Animate border gradient
-	_border_gradient_offset += delta * 0.5
-	if _border_gradient_offset > TAU:
-		_border_gradient_offset -= TAU
+	_border_phase += delta * 2.0
+	_corner_glow_phase += delta * 3.0
+	_pulse_intensity = lerpf(_pulse_intensity, _warning_flash, delta * 2.0)
+	
+	if _border_phase > TAU:
+		_border_phase -= TAU
+	
 	queue_redraw()
 
 
 func _draw() -> void:
-	# Draw background
+	_draw_background()
+	_draw_grid()
+	_draw_border()
+	_draw_corner_markers()
+	
+	# Draw warning overlay when chaos is high
+	if _pulse_intensity > 0.3:
+		_draw_warning_overlay()
+
+
+func _draw_background() -> void:
+	# Main dark background
 	draw_rect(board_rect, BOARD_BG_COLOR)
 	
-	# Draw animated gradient border
-	_draw_gradient_border()
+	# Subtle inner gradient effect (darker edges)
+	var inner_rect = board_rect.grow(-8)
+	draw_rect(inner_rect, BOARD_BG_SECONDARY)
+
+
+func _draw_grid() -> void:
+	# Harsh industrial grid
+	var base_alpha = 0.15 + _pulse_intensity * 0.1
 	
-	# Draw grid (subtle)
-	_draw_grid()
+	# Main grid lines
+	for x in range(int(board_rect.position.x), int(board_rect.end.x) + 1, TILE_SIZE):
+		var is_major = int(x) % (TILE_SIZE * 4) == 0
+		var grid_color = GRID_COLOR_ACCENT if is_major else GRID_COLOR_BASE
+		grid_color.a = base_alpha * (1.5 if is_major else 1.0)
+		
+		draw_line(
+			Vector2(x, board_rect.position.y),
+			Vector2(x, board_rect.end.y),
+			grid_color, 1.0 if is_major else 0.5
+		)
+	
+	for y in range(int(board_rect.position.y), int(board_rect.end.y) + 1, TILE_SIZE):
+		var is_major = int(y) % (TILE_SIZE * 4) == 0
+		var grid_color = GRID_COLOR_ACCENT if is_major else GRID_COLOR_BASE
+		grid_color.a = base_alpha * (1.5 if is_major else 1.0)
+		
+		draw_line(
+			Vector2(board_rect.position.x, y),
+			Vector2(board_rect.end.x, y),
+			grid_color, 1.0 if is_major else 0.5
+		)
 
 
-func _draw_gradient_border() -> void:
-	var border_width = 4.0
+func _draw_border() -> void:
+	var border_width = 3.0
+	var outer_width = 1.0
+	
 	var corners = [
 		board_rect.position,
 		Vector2(board_rect.end.x, board_rect.position.y),
@@ -349,38 +387,84 @@ func _draw_gradient_border() -> void:
 		Vector2(board_rect.position.x, board_rect.end.y)
 	]
 	
-	# Draw each edge with gradient color
+	# Draw each edge with animated color
 	for i in range(4):
 		var start = corners[i]
 		var end = corners[(i + 1) % 4]
 		
-		# Animated gradient based on position
-		var t = (float(i) / 4.0 + _border_gradient_offset / TAU)
-		t = fmod(t, 1.0)
-		var color = BOARD_BORDER_COLOR_1.lerp(BOARD_BORDER_COLOR_2, sin(t * PI))
+		# Phase-shifted color per edge
+		var t = fmod(_border_phase + (float(i) * PI / 2.0), TAU) / TAU
+		var edge_color = BORDER_PRIMARY.lerp(BORDER_SECONDARY, sin(t * PI))
 		
-		draw_line(start, end, color, border_width, true)
+		# Add warning tint
+		if _pulse_intensity > 0.5:
+			edge_color = edge_color.lerp(BORDER_WARNING, (_pulse_intensity - 0.5) * 2.0)
+		
+		# Main border
+		draw_line(start, end, edge_color, border_width, true)
+		
+		# Outer glow line
+		var glow_color = edge_color
+		glow_color.a = 0.3
+		var offset = Vector2.ZERO
+		match i:
+			0: offset = Vector2(0, -2)  # Top
+			1: offset = Vector2(2, 0)   # Right
+			2: offset = Vector2(0, 2)   # Bottom
+			3: offset = Vector2(-2, 0)  # Left
+		draw_line(start + offset, end + offset, glow_color, outer_width, true)
 
 
-func _draw_grid() -> void:
-	var grid_color = BOARD_BG_COLOR.lightened(0.1)
-	grid_color.a = 0.3
+func _draw_corner_markers() -> void:
+	var marker_size = 12.0
+	var corners = [
+		board_rect.position,
+		Vector2(board_rect.end.x, board_rect.position.y),
+		board_rect.end,
+		Vector2(board_rect.position.x, board_rect.end.y)
+	]
 	
-	# Vertical lines
-	for x in range(int(board_rect.position.x), int(board_rect.end.x) + 1, TILE_SIZE):
-		draw_line(
-			Vector2(x, board_rect.position.y),
-			Vector2(x, board_rect.end.y),
-			grid_color, 1.0
-		)
+	for i in range(4):
+		var corner = corners[i]
+		var pulse = sin(_corner_glow_phase + i * PI / 2) * 0.3 + 0.7
+		var marker_color = BORDER_PRIMARY.lerp(BORDER_SECONDARY, float(i) / 4.0)
+		marker_color.a = pulse
+		
+		# Draw L-shaped corner marker
+		var h_dir = 1 if i in [0, 3] else -1
+		var v_dir = 1 if i in [0, 1] else -1
+		
+		draw_line(corner, corner + Vector2(marker_size * h_dir, 0), marker_color, 2.0)
+		draw_line(corner, corner + Vector2(0, marker_size * v_dir), marker_color, 2.0)
+		
+		# Corner dot
+		draw_circle(corner, 3, marker_color)
+
+
+func _draw_warning_overlay() -> void:
+	# Pulsing red vignette when chaos is high
+	var warning_alpha = (_pulse_intensity - 0.3) * 0.3
+	var warning_color = BORDER_WARNING
+	warning_color.a = warning_alpha * (0.5 + sin(_border_phase * 4) * 0.5)
 	
-	# Horizontal lines
-	for y in range(int(board_rect.position.y), int(board_rect.end.y) + 1, TILE_SIZE):
-		draw_line(
-			Vector2(board_rect.position.x, y),
-			Vector2(board_rect.end.x, y),
-			grid_color, 1.0
-		)
+	# Draw edge warnings
+	var edge_size = 20.0
+	
+	# Top edge
+	var top_rect = Rect2(board_rect.position, Vector2(board_rect.size.x, edge_size))
+	draw_rect(top_rect, warning_color)
+	
+	# Bottom edge
+	var bottom_rect = Rect2(Vector2(board_rect.position.x, board_rect.end.y - edge_size), Vector2(board_rect.size.x, edge_size))
+	draw_rect(bottom_rect, warning_color)
+	
+	# Left edge
+	var left_rect = Rect2(board_rect.position, Vector2(edge_size, board_rect.size.y))
+	draw_rect(left_rect, warning_color)
+	
+	# Right edge
+	var right_rect = Rect2(Vector2(board_rect.end.x - edge_size, board_rect.position.y), Vector2(edge_size, board_rect.size.y))
+	draw_rect(right_rect, warning_color)
 
 
 # =============================================================================
@@ -395,7 +479,6 @@ func get_board_center() -> Vector2:
 
 
 func get_stocked_ratio() -> float:
-	"""Calculate ratio of boxes that currently have things in them."""
 	if active_boxes.is_empty():
 		return 1.0
 	
