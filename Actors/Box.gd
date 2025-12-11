@@ -22,6 +22,7 @@ var was_emptied_this_round: bool = false
 # Visual
 var _base_color: Color
 var _glow_intensity: float = 0.0
+var _reject_flash_intensity: float = 0.0  # Red flash when wrong thing type attempted
 
 
 # =============================================================================
@@ -82,6 +83,15 @@ func _draw() -> void:
 	else:
 		bg_color = bg_color.darkened(0.3)
 		bg_color.a = 0.8
+	
+	# Reject flash effect (red/white flash when wrong thing type attempted)
+	if _reject_flash_intensity > 0:
+		var reject_color = Color.RED.lerp(Color.WHITE, 0.3)
+		reject_color.a = _reject_flash_intensity * 0.8
+		# Draw expanded reject glow
+		draw_rect(rect.grow(8), reject_color)
+		# Tint the background toward red
+		bg_color = bg_color.lerp(Color.RED, _reject_flash_intensity * 0.5)
 	
 	# Glow effect when receiving things
 	if _glow_intensity > 0:
@@ -216,9 +226,25 @@ func _flash_glow() -> void:
 	tween.tween_callback(queue_redraw)
 
 
+func flash_reject() -> void:
+	"""Flash red/white when player attempts to drop wrong thing type."""
+	# Kill any existing reject tween
+	var tween = create_tween()
+	# Quick flash up, slower fade out
+	tween.tween_property(self, "_reject_flash_intensity", 1.0, 0.05)
+	tween.tween_property(self, "_reject_flash_intensity", 0.0, 0.25)
+	tween.tween_callback(queue_redraw)
+	
+	# Emit signal for audio/visual coordination
+	SignalBus.publish("box.reject", {
+		"box": self,
+		"thing_type_id": thing_type_id
+	})
+
+
 func _process(_delta: float) -> void:
-	# Redraw during glow animation
-	if _glow_intensity > 0:
+	# Redraw during glow or reject animation
+	if _glow_intensity > 0 or _reject_flash_intensity > 0:
 		queue_redraw()
 
 

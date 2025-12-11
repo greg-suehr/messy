@@ -1,5 +1,5 @@
 extends CharacterBody2D
-class_name Guy
+class_name OldGuy
 ## Guy - A chaos agent that takes Things from Boxes and scatters them
 ##
 ## Guys spawn, navigate to a target Box, take a Thing, drop it somewhere

@@ -41,6 +41,7 @@ signal player_moved(position: Vector2)
 signal player_thing_picked_up(thing: Node2D, stack_size: int)
 signal player_thing_dropped(thing: Node2D, into_box: bool)
 signal player_stack_changed(stack: Array)
+signal player_box_mismatch(player: Node2D, box: Node2D, position: Vector2)  # Wrong thing type stun
 
 # =============================================================================
 # THINGS
@@ -59,6 +60,7 @@ signal box_thing_added(box: Node2D, thing: Node2D, count: int)
 signal box_thing_removed(box: Node2D, thing: Node2D, count: int)
 signal box_emptied(box: Node2D)  # Score penalty trigger
 signal box_restocked(box: Node2D)  # Was empty, now has things
+signal box_rejected(box: Node2D, thing_type_id: String)  # Wrong thing type attempted
 
 # =============================================================================
 # GUYS
@@ -179,6 +181,11 @@ func publish(event_name: String, payload := {}) -> void:
 				payload.get("into_box", false))
 		"player.stack.changed":
 			player_stack_changed.emit(payload.get("stack", []))
+		"player.box.mismatch":
+			player_box_mismatch.emit(
+				payload.get("player", null),
+				payload.get("box", null),
+				payload.get("position", Vector2.ZERO))
 		
 		# Things
 		"thing.spawned":
@@ -223,6 +230,10 @@ func publish(event_name: String, payload := {}) -> void:
 			box_emptied.emit(payload.get("box", null))
 		"box.restocked":
 			box_restocked.emit(payload.get("box", null))
+		"box.reject":
+			box_rejected.emit(
+				payload.get("box", null),
+				payload.get("thing_type_id", ""))
 		
 		# Guys
 		"guy.spawned":
